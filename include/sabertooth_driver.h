@@ -63,7 +63,9 @@ enum STOP_BIT {
 int open_port(const char *dir, int flags);
 int close_port(int fd);
 void configure_port(int fd, BAUD baud_rate, PARITY_BIT parity_bit, BYTE_SIZE byte_size, STOP_BIT stop_bit);
-void motor_callback(const sabertooth_driver::motor_cmd& cmd_msg);
-void mixed_callback(const sabertooth_driver::mixed_cmd& cmd_msg);
+void motor1_callback(const std_msgs::Float64& cmd_msg);
+void motor2_callback(const std_msgs::Float64& cmd_msg);
+void drive_callback(const std_msgs::Float64& cmd_msg);
+void turn_callback(const std_msgs::Float64& cmd_msg);
 
 #endif /* SABERTHOOTH_DRIVER_H_ */

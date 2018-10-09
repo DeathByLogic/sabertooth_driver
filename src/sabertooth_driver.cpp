@@ -16,12 +16,7 @@
 
 // ROS Includes
 #include <ros/ros.h>
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/Vector3.h>
-
-// Sabertooth Driver Messages
-#include "sabertooth_driver/mixed_cmd.h"
-#include "sabertooth_driver/motor_cmd.h"
+#include <std_msgs/Float64.h>
 
 // Other C Includes
 #include "sabertooth.h"
@@ -35,6 +30,9 @@ int main (int argc, char** argv) {
 
 	std::string port;
 	int baud, address, timeout, ramp, deadband;
+	bool mixed_mode;
+	std::string motor1_topic, motor2_topic;
+	std::string drive_topic, turn_topic;
 	float min_voltage, max_voltage;
 	BAUD baud_rate;
 
@@ -61,7 +59,7 @@ int main (int argc, char** argv) {
 	}
 
 	// Get the baud rate for the serial port
-	n.param("sabertooth_driver/baud", baud, 9600);
+	n.param<int>("sabertooth_driver/baud", baud, 9600);
 
 	switch (baud) {
 		case 2400:
@@ -81,8 +79,23 @@ int main (int argc, char** argv) {
 			break;
 	}
 
+	// Get the operating mode
+	n.param<bool>("sabertooth_driver/mixed_mode", mixed_mode, false);
+
+	if (mixed_mode == false) {
+		// Direct drive mode	
+		n.param<std::string>("sabertooth_driver/motor1_topic", motor1_topic, "motor1_command");
+		n.param<std::string>("sabertooth_driver/motor2_topic", motor2_topic, "motor2_command");
+	} else {
+		// Mixed mode
+		n.param<std::string>("sabertooth_driver/drive_topic", drive_topic, "drive_command");
+		n.param<std::string>("sabertooth_driver/turn_topic", turn_topic, "turn_command");
+	}
+
 	// Open serial port
 	if ((fd = open_port(port.data(), O_RDWR | O_NOCTTY | O_NDELAY)) <= 0) {
+		ROS_ERROR("Sabertooth: Failed to open port");
+
 		exit(errno);
 	}
 
@@ -126,9 +139,19 @@ int main (int argc, char** argv) {
 		ST->setRamping(ramp);
 	}
 
+	ros::Subscriber motor1_sub;
+	ros::Subscriber motor2_sub;
+	ros::Subscriber drive_sub;
+	ros::Subscriber turn_sub;
+
 	// Subscribe to the motor commands
-	ros::Subscriber motor_sub = n.subscribe("sabertooth_driver/motor_cmd", 50, motor_callback);
-	ros::Subscriber mixed_sub = n.subscribe("sabertooth_driver/mixed_cmd", 50, mixed_callback);
+	if (mixed_mode == false) {
+		motor1_sub = n.subscribe(motor1_topic, 50, motor1_callback);
+		motor2_sub = n.subscribe(motor2_topic, 50, motor2_callback);
+	} else {
+		drive_sub = n.subscribe(drive_topic, 50, drive_callback);
+		turn_sub = n.subscribe(turn_topic, 50, turn_callback);
+	}
 
 	// Spin until done
 	ros::spin();
@@ -203,12 +226,18 @@ void configure_port(int fd, BAUD baud_rate, PARITY_BIT parity_bit, BYTE_SIZE byt
 	tcsetattr(fd, TCSANOW, &options);
 }
 
-void motor_callback(const sabertooth_driver::motor_cmd& cmd_msg) {
-	ST->motor(1, cmd_msg.motor_1);
-	ST->motor(2, cmd_msg.motor_2);
+void motor1_callback(const std_msgs::Float64& cmd_msg) {
+	ST->motor(1, (uint8_t)round(cmd_msg.data));
 }
 
-void mixed_callback(const sabertooth_driver::mixed_cmd& cmd_msg) {
-	ST->drive(cmd_msg.drive);
-	ST->turn(cmd_msg.turn);
+void motor2_callback(const std_msgs::Float64& cmd_msg) {
+	ST->motor(2, (uint8_t)round(cmd_msg.data));
+}
+
+void drive_callback(const std_msgs::Float64& cmd_msg) {
+	ST->drive((uint8_t)round(cmd_msg.data));
+}
+
+void turn_callback(const std_msgs::Float64& cmd_msg) {
+	ST->turn((uint8_t)round(cmd_msg.data));
 }
